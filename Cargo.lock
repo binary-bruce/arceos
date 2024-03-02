@@ -31,6 +31,7 @@ dependencies = [
  "rand",
  "rlsf",
  "slab_allocator",
+ "talc",
 ]
 
 [[package]]
@@ -1791,6 +1792,12 @@ dependencies = [
  "quote",
  "unicode-ident",
 ]
+
+[[package]]
+name = "talc"
+version = "4.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5244db9f91c0b033fa05c16e349ccdb0a3225198a5a71dbeacd36696e08d940b"
 
 [[package]]
 name = "thiserror"
