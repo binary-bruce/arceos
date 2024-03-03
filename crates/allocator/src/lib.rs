@@ -36,6 +36,11 @@ mod new;
 #[cfg(feature = "new")]
 pub use new::YourNewByteAllocator;
 
+#[cfg(feature = "bump")]
+mod bump;
+#[cfg(feature = "bump")]
+pub use bump::BumpAllocator;
+
 use core::alloc::Layout;
 use core::ptr::NonNull;
 
