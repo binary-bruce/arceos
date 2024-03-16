@@ -2010,14 +2010,18 @@ version = "0.1.0"
 dependencies = [
  "arceos_api",
  "axconfig",
+ "axerrno",
  "axfeat",
+ "axfs",
  "axhal",
  "axlog",
  "axprocess",
  "axsignal",
+ "axsync",
  "axtask",
  "numeric-enum-macro",
  "rand",
+ "syscall_fs",
  "syscall_utils",
 ]
 

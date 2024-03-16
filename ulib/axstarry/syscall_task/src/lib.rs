@@ -5,7 +5,7 @@ mod task_syscall_id;
 #[cfg(feature = "signal")]
 use axsignal::action::SigAction;
 use syscall_utils::{
-    ITimerVal, RLimit, SysInfo, SyscallError, SyscallResult, TimeSecs, TimeVal, UtsName, WaitFlags,
+    ITimerVal, RLimit, SysInfo, SyscallResult, TimeSecs, TimeVal, UtsName, WaitFlags,
     TMS,
 };
 pub use task_syscall_id::TaskSyscallId::{self, *};
@@ -128,7 +128,14 @@ pub fn task_syscall(syscall_id: task_syscall_id::TaskSyscallId, args: [usize; 6]
             args[2] as *const TimeSecs,
             args[3] as *mut TimeSecs,
         ),
-        SOCKETPAIR => Err(SyscallError::EAFNOSUPPORT),
+        SOCKETPAIR => {
+            syscall_socketpair(
+                args[0] as usize,
+                args[1] as usize,
+                args[2] as usize,
+                args[3] as *mut [u32; 2],
+            )
+        },
         #[allow(unused)]
         _ => {
             panic!("Invalid Syscall Id: {:?}!", syscall_id);
