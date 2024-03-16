@@ -9,6 +9,8 @@ mod schedule;
 
 mod task;
 
+mod rwpipe;
+
 mod socketpair;
 
 mod utils;
@@ -23,6 +25,8 @@ pub use futex::*;
 pub use schedule::*;
 
 pub use task::*;
+
+pub use rwpipe::*;
 
 pub use socketpair::*;
 
