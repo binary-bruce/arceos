@@ -9,6 +9,10 @@ mod schedule;
 
 mod task;
 
+mod rwpipe;
+
+mod socketpair;
+
 mod utils;
 
 #[cfg(feature = "signal")]
@@ -21,5 +25,9 @@ pub use futex::*;
 pub use schedule::*;
 
 pub use task::*;
+
+pub use rwpipe::*;
+
+pub use socketpair::*;
 
 pub use utils::*;
