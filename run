@@ -1,0 +1,2 @@
+#!/bin/sh
+make A=apps/monolithic_userboot ARCH=riscv64 run LOG=error
