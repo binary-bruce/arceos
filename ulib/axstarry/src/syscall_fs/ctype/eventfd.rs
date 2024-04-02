@@ -3,19 +3,25 @@ use axerrno::{AxError, AxResult};
 use axfs::api::{FileIO, FileIOType};
 use axsync::Mutex;
 use axtask::yield_now;
+use bitflags::{bitflags, Flags};
 
-// https://sites.uclouvain.be/SystInfo/usr/include/sys/eventfd.h.html
-static EFD_SEMAPHORE: i32 = 1;
-static EFD_NONBLOCK: i32 = 2048;
+bitflags! {
+    // https://sites.uclouvain.be/SystInfo/usr/include/sys/eventfd.h.html
+    #[derive(Clone, Copy, Debug)]
+    pub struct EventFdFlag: u32 {
+        const EFD_SEMAPHORE = 1;
+        const EFD_NONBLOCK = 2048;
+    }
+}
 
 // https://man7.org/linux/man-pages/man2/eventfd2.2.html
 pub struct EventFd {
     value: Arc<Mutex<u64>>,
-    flags: i32,
+    flags: u32,
 }
 
 impl EventFd {
-    pub fn new(initval: u64, flags: i32) -> EventFd {
+    pub fn new(initval: u64, flags: u32) -> EventFd {
         EventFd {
             value: Arc::new(Mutex::new(initval)),
             flags,
@@ -32,7 +38,7 @@ impl FileIO for EventFd {
 
         // If EFD_SEMAPHORE was not specified and the eventfd counter has a nonzero value, then a read(2) returns 8 bytes containing that value,
         // and the counter's value is reset to zero.
-        if self.flags & EFD_SEMAPHORE == 0 && *self.value.lock() != 0 {
+        if self.flags & EventFdFlag::EFD_SEMAPHORE.bits() == 0 && *self.value.lock() != 0 {
             buf[0..len].copy_from_slice(&self.value.lock().to_ne_bytes());
             *self.value.lock() = 0;
             return Ok(len);
@@ -40,7 +46,7 @@ impl FileIO for EventFd {
 
         // If EFD_SEMAPHORE was specified and the eventfd counter has a nonzero value, then a read(2) returns 8 bytes containing the value,
         // and the counter's value is decremented by 1.
-        if self.flags & EFD_SEMAPHORE != 0 && *self.value.lock() != 0 {
+        if self.flags & EventFdFlag::EFD_SEMAPHORE.bits() != 0 && *self.value.lock() != 0 {
             buf[0..len].copy_from_slice(&self.value.lock().to_ne_bytes());
             let _ = self.value.lock().checked_add_signed(-1);
             return Ok(len);
@@ -55,7 +61,7 @@ impl FileIO for EventFd {
                 return Ok(len);
             }
 
-            if self.flags & EFD_NONBLOCK != 0 {
+            if self.flags & EventFdFlag::EFD_NONBLOCK.bits() != 0 {
                 yield_now()
             } else {
                 return Err(AxError::WouldBlock);
