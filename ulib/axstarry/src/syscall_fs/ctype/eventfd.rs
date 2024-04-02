@@ -4,9 +4,11 @@ use axfs::api::{FileIO, FileIOType};
 use axsync::Mutex;
 use axtask::yield_now;
 
+// https://sites.uclouvain.be/SystInfo/usr/include/sys/eventfd.h.html
 static EFD_SEMAPHORE: i32 = 1;
 static EFD_NONBLOCK: i32 = 2048;
 
+// https://man7.org/linux/man-pages/man2/eventfd2.2.html
 pub struct EventFd {
     value: Arc<Mutex<u64>>,
     flags: i32,
