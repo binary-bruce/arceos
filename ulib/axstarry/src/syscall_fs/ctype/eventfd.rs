@@ -1,15 +1,27 @@
 use alloc::sync::Arc;
-use axerrno::AxResult;
+use axerrno::{AxError, AxResult};
 use axfs::api::{FileIO, FileIOType};
 use axsync::Mutex;
+use axtask::yield_now;
+use bitflags::{bitflags, Flags};
 
+bitflags! {
+    // https://sites.uclouvain.be/SystInfo/usr/include/sys/eventfd.h.html
+    #[derive(Clone, Copy, Debug)]
+    pub struct EventFdFlag: u32 {
+        const EFD_SEMAPHORE = 1;
+        const EFD_NONBLOCK = 2048;
+    }
+}
+
+// https://man7.org/linux/man-pages/man2/eventfd2.2.html
 pub struct EventFd {
     value: Arc<Mutex<u64>>,
-    flags: i32,
+    flags: u32,
 }
 
 impl EventFd {
-    pub fn new(initval: u64, flags: i32) -> EventFd {
+    pub fn new(initval: u64, flags: u32) -> EventFd {
         EventFd {
             value: Arc::new(Mutex::new(initval)),
             flags,
@@ -20,10 +32,41 @@ impl EventFd {
 impl FileIO for EventFd {
     fn read(&self, buf: &mut [u8]) -> AxResult<usize> {
         let len: usize = core::mem::size_of::<u64>();
-        assert!(buf.len() == len);
+        if buf.len() < len {
+            return Err(AxError::InvalidInput);
+        }
 
-        buf[0..len].copy_from_slice(&self.value.lock().to_ne_bytes());
-        Ok(len)
+        // If EFD_SEMAPHORE was not specified and the eventfd counter has a nonzero value, then a read(2) returns 8 bytes containing that value,
+        // and the counter's value is reset to zero.
+        if self.flags & EventFdFlag::EFD_SEMAPHORE.bits() == 0 && *self.value.lock() != 0 {
+            buf[0..len].copy_from_slice(&self.value.lock().to_ne_bytes());
+            *self.value.lock() = 0;
+            return Ok(len);
+        }
+
+        // If EFD_SEMAPHORE was specified and the eventfd counter has a nonzero value, then a read(2) returns 8 bytes containing the value,
+        // and the counter's value is decremented by 1.
+        if self.flags & EventFdFlag::EFD_SEMAPHORE.bits() != 0 && *self.value.lock() != 0 {
+            buf[0..len].copy_from_slice(&self.value.lock().to_ne_bytes());
+            let _ = self.value.lock().checked_add_signed(-1);
+            return Ok(len);
+        }
+
+        // If the eventfd counter is zero at the time of the call to read(2),
+        // then the call either blocks until the counter becomes nonzero (at which time, the read(2) proceeds as described above)
+        // or fails with the error EAGAIN if the file descriptor has been made nonblocking.
+        loop {
+            if *self.value.lock() != 0 {
+                buf[0..len].copy_from_slice(&self.value.lock().to_ne_bytes());
+                return Ok(len);
+            }
+
+            if self.flags & EventFdFlag::EFD_NONBLOCK.bits() != 0 {
+                yield_now()
+            } else {
+                return Err(AxError::WouldBlock);
+            }
+        }
     }
 
     fn write(&self, buf: &[u8]) -> AxResult<usize> {
@@ -73,6 +116,14 @@ mod tests {
 
         assert_eq!(42, event_fd_val);
         assert_eq!(4, len);
+    }
+
+    #[test]
+    fn test_read_with_bad_input() {
+        let event_fd = EventFd::new(42, 0);
+        let event_fd_val = 0u32;
+        let result = event_fd.read(&mut event_fd_val.to_ne_bytes());
+        assert_eq!(Err(AxError::InvalidInput), result);
     }
 
     #[test]
