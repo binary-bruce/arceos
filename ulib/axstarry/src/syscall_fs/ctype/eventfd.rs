@@ -57,8 +57,8 @@ impl FileIO for EventFd {
             // If EFD_SEMAPHORE was specified and the eventfd counter has a nonzero value, then a read returns 8 bytes containing the value,
             // and the counter's value is decremented by 1.
             if self.has_semaphore_set() && *value_guard != 0 {
-                buf[0..len].copy_from_slice(&self.value.lock().to_ne_bytes());
-                let _ = self.value.lock().checked_add_signed(-1);
+                buf[0..len].copy_from_slice(&value_guard.to_ne_bytes());
+                let _ = value_guard.checked_add_signed(-1);
                 return Ok(len);
             }
 
