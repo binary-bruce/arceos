@@ -27,6 +27,14 @@ impl EventFd {
             flags,
         }
     }
+
+    fn should_block(&self) -> bool {
+        self.flags & EventFdFlag::EFD_NONBLOCK.bits() == 0
+    }
+
+    fn has_semaphore_set(&self) -> bool {
+        self.flags & EventFdFlag::EFD_SEMAPHORE.bits() != 0
+    }
 }
 
 impl FileIO for EventFd {
@@ -36,32 +44,34 @@ impl FileIO for EventFd {
             return Err(AxError::InvalidInput);
         }
 
-        // If EFD_SEMAPHORE was not specified and the eventfd counter has a nonzero value, then a read(2) returns 8 bytes containing that value,
-        // and the counter's value is reset to zero.
-        if self.flags & EventFdFlag::EFD_SEMAPHORE.bits() == 0 && *self.value.lock() != 0 {
-            buf[0..len].copy_from_slice(&self.value.lock().to_ne_bytes());
-            *self.value.lock() = 0;
-            return Ok(len);
-        }
-
-        // If EFD_SEMAPHORE was specified and the eventfd counter has a nonzero value, then a read(2) returns 8 bytes containing the value,
-        // and the counter's value is decremented by 1.
-        if self.flags & EventFdFlag::EFD_SEMAPHORE.bits() != 0 && *self.value.lock() != 0 {
-            buf[0..len].copy_from_slice(&self.value.lock().to_ne_bytes());
-            let _ = self.value.lock().checked_add_signed(-1);
-            return Ok(len);
-        }
-
-        // If the eventfd counter is zero at the time of the call to read(2),
-        // then the call either blocks until the counter becomes nonzero (at which time, the read(2) proceeds as described above)
-        // or fails with the error EAGAIN if the file descriptor has been made nonblocking.
         loop {
-            if *self.value.lock() != 0 {
-                buf[0..len].copy_from_slice(&self.value.lock().to_ne_bytes());
+            let mut value_guard = self.value.lock();
+            // If EFD_SEMAPHORE was not specified and the eventfd counter has a nonzero value, then a read returns 8 bytes containing that value,
+            // and the counter's value is reset to zero.
+            if !self.has_semaphore_set() && *value_guard != 0 {
+                buf[0..len].copy_from_slice(&value_guard.to_ne_bytes());
+                *value_guard = 0;
                 return Ok(len);
             }
 
-            if self.flags & EventFdFlag::EFD_NONBLOCK.bits() != 0 {
+            // If EFD_SEMAPHORE was specified and the eventfd counter has a nonzero value, then a read returns 8 bytes containing the value,
+            // and the counter's value is decremented by 1.
+            if self.has_semaphore_set() && *value_guard != 0 {
+                buf[0..len].copy_from_slice(&self.value.lock().to_ne_bytes());
+                let _ = self.value.lock().checked_add_signed(-1);
+                return Ok(len);
+            }
+
+            // If the eventfd counter is zero at the time of the call to read,
+            // then the call either blocks until the counter becomes nonzero (at which time, the read proceeds as described above)
+            // or fails with the error EAGAIN if the file descriptor has been made nonblocking.
+            if *value_guard != 0 {
+                buf[0..len].copy_from_slice(&value_guard.to_ne_bytes());
+                return Ok(len);
+            }
+
+            if self.should_block() {
+                drop(value_guard);
                 yield_now()
             } else {
                 return Err(AxError::WouldBlock);
@@ -71,17 +81,30 @@ impl FileIO for EventFd {
 
     fn write(&self, buf: &[u8]) -> AxResult<usize> {
         let len: usize = core::mem::size_of::<u64>();
-        assert!(buf.len() == len);
 
+        // A write fails with the error EINVAL if the size of the supplied buffer is less than 8 bytes,
+        // or if an attempt is made to write the value 0xffffffffffffffff.
         let val = u64::from_ne_bytes(buf[0..len].try_into().unwrap());
-        let mut value_guard = self.value.lock();
-        match value_guard.checked_add(val) {
-            Some(new_value) => {
-                *value_guard = new_value;
-                Ok(len)
-            }
-            None => {
-                panic!("overflow, to be handled in the future")
+        if buf.len() < 8 || val == u64::MAX {
+            return Err(AxError::InvalidInput);
+        }
+
+        loop {
+            let mut value_guard = self.value.lock();
+            // The maximum value that may be stored in the counter is the largest unsigned 64-bit value minus 1 (i.e., 0xfffffffffffffffe).
+            match value_guard.checked_add(val + 1) {
+                Some(new_value) => {
+                    *value_guard = new_value;
+                    return Ok(len);
+                }
+                None => {
+                    if self.should_block() {
+                        drop(value_guard);
+                        yield_now()
+                    } else {
+                        return Err(AxError::InvalidInput);
+                    }
+                }
             }
         }
     }
