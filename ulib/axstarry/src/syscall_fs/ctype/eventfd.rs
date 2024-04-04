@@ -109,12 +109,14 @@ impl FileIO for EventFd {
         }
     }
 
+    // The file descriptor is readable if the counter has a value greater than 0
     fn readable(&self) -> bool {
-        true
+        *self.value.lock() > 0
     }
 
+    // The file descriptor is writable if it is possible to write a value of at least "1" without blocking.
     fn writable(&self) -> bool {
-        true
+        *self.value.lock() < u64::MAX - 1
     }
 
     fn executable(&self) -> bool {
