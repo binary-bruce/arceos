@@ -109,14 +109,12 @@ impl FileIO for EventFd {
         }
     }
 
-    // The file descriptor is readable if the counter has a value greater than 0
     fn readable(&self) -> bool {
-        *self.value.lock() > 0
+        true
     }
 
-    // The file descriptor is writable if it is possible to write a value of at least "1" without blocking.
     fn writable(&self) -> bool {
-        *self.value.lock() < u64::MAX - 1
+        true
     }
 
     fn executable(&self) -> bool {
@@ -125,6 +123,16 @@ impl FileIO for EventFd {
 
     fn get_type(&self) -> FileIOType {
         FileIOType::Other
+    }
+
+    // The file descriptor is readable if the counter has a value greater than 0
+    fn ready_to_read(&self) -> bool {
+        *self.value.lock() > 0
+    }
+
+    // The file descriptor is writable if it is possible to write a value of at least "1" without blocking.
+    fn ready_to_write(&self) -> bool {
+        *self.value.lock() < u64::MAX - 1
     }
 }
 
