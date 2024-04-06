@@ -93,10 +93,12 @@ impl FileIO for EventFd {
             let mut value_guard = self.value.lock();
             // The maximum value that may be stored in the counter is the largest unsigned 64-bit value minus 1 (i.e., 0xfffffffffffffffe).
             match value_guard.checked_add(val + 1) {
-                Some(new_value) => {
-                    *value_guard = new_value;
+                // no overflow
+                Some(_) => {
+                    *value_guard += val;
                     return Ok(len);
                 }
+                // overflow
                 None => {
                     if self.should_block() {
                         drop(value_guard);
