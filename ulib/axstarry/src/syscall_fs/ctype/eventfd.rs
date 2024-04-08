@@ -105,7 +105,7 @@ impl FileIO for EventFd {
                         drop(value_guard);
                         yield_now()
                     } else {
-                        return Err(AxError::InvalidInput);
+                        return Err(AxError::WouldBlock);
                     }
                 }
             }
