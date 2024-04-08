@@ -3,7 +3,7 @@ use axerrno::{AxError, AxResult};
 use axfs::api::{FileIO, FileIOType};
 use axsync::Mutex;
 use axtask::yield_now;
-use bitflags::{bitflags, Flags};
+use bitflags::bitflags;
 
 bitflags! {
     // https://sites.uclouvain.be/SystInfo/usr/include/sys/eventfd.h.html
