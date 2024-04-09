@@ -1,6 +1,6 @@
 use alloc::sync::Arc;
 use axerrno::{AxError, AxResult};
-use axfs::api::{FileIO, FileIOType};
+use axfs::api::{FileIO, FileIOType, OpenFlags};
 use axsync::Mutex;
 use axtask::yield_now;
 use bitflags::bitflags;
@@ -9,8 +9,9 @@ bitflags! {
     // https://sites.uclouvain.be/SystInfo/usr/include/sys/eventfd.h.html
     #[derive(Clone, Copy, Debug)]
     pub struct EventFdFlag: u32 {
-        const EFD_SEMAPHORE = 1;
-        const EFD_NONBLOCK = 2048;
+        const EFD_SEMAPHORE = 0x1;
+        const EFD_NONBLOCK = 0x800;
+        const EFD_CLOEXEC = 0x80000;
     }
 }
 
@@ -136,6 +137,18 @@ impl FileIO for EventFd {
     // The file descriptor is writable if it is possible to write a value of at least "1" without blocking.
     fn ready_to_write(&self) -> bool {
         *self.value.lock() < u64::MAX - 1
+    }
+
+    fn get_status(&self) -> OpenFlags {
+        let mut status = OpenFlags::RDWR;
+        if self.flags & EventFdFlag::EFD_NONBLOCK.bits() != 0 {
+            status &= OpenFlags::NON_BLOCK;
+        }
+        if self.flags & EventFdFlag::EFD_CLOEXEC.bits() != 0 {
+            status &= OpenFlags::CLOEXEC;
+        }
+        
+        status
     }
 }
 
