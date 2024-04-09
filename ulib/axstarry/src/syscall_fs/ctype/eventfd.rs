@@ -3,7 +3,7 @@ use axerrno::{AxError, AxResult};
 use axfs::api::{FileIO, FileIOType};
 use axsync::Mutex;
 use axtask::yield_now;
-use bitflags::{bitflags, Flags};
+use bitflags::bitflags;
 
 bitflags! {
     // https://sites.uclouvain.be/SystInfo/usr/include/sys/eventfd.h.html
@@ -54,10 +54,11 @@ impl FileIO for EventFd {
                 return Ok(len);
             }
 
-            // If EFD_SEMAPHORE was specified and the eventfd counter has a nonzero value, then a read returns 8 bytes containing the value,
+            // If EFD_SEMAPHORE was specified and the eventfd counter has a nonzero value, then a read returns 8 bytes containing the value 1,
             // and the counter's value is decremented by 1.
             if self.has_semaphore_set() && *value_guard != 0 {
-                buf[0..len].copy_from_slice(&value_guard.to_ne_bytes());
+                let result: u64 = 1;
+                buf[0..len].copy_from_slice(&result.to_ne_bytes());
                 let _ = value_guard.checked_add_signed(-1);
                 return Ok(len);
             }
@@ -104,7 +105,7 @@ impl FileIO for EventFd {
                         drop(value_guard);
                         yield_now()
                     } else {
-                        return Err(AxError::InvalidInput);
+                        return Err(AxError::WouldBlock);
                     }
                 }
             }
