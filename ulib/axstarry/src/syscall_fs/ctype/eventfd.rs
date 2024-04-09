@@ -147,7 +147,7 @@ impl FileIO for EventFd {
         if self.flags & EventFdFlag::EFD_CLOEXEC.bits() != 0 {
             status &= OpenFlags::CLOEXEC;
         }
-        
+
         status
     }
 }
